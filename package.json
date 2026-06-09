@@ -13,7 +13,8 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
-    "setup": "prisma generate && prisma db push && tsx prisma/seed.ts"
+    "setup": "prisma generate && prisma db push && tsx prisma/seed.ts",
+    "gen:sql": "bash scripts/build-init-sql.sh"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

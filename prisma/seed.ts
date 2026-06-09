@@ -7,6 +7,7 @@
 //    estimates derived from public results and reputation as of the snapshot date.
 // Everything here is fully editable in the app — treat it as a starting point.
 
+import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { predictMatch } from "../src/lib/model";
 import {
@@ -18,11 +19,11 @@ import {
 
 const prisma = new PrismaClient();
 
-const FIFA_SOURCE = "https://inside.fifa.com/fifa-world-ranking/men";
-const FIFA_DATE = "2026-04-01";
-const SNAPSHOT_NOTE = "FIFA April 2026 snapshot; form & strength estimated from public results.";
+export const FIFA_SOURCE = "https://inside.fifa.com/fifa-world-ranking/men";
+export const FIFA_DATE = "2026-04-01";
+export const SNAPSHOT_NOTE = "FIFA April 2026 snapshot; form & strength estimated from public results.";
 
-interface SeedTeam {
+export interface SeedTeam {
   name: string;
   code: string;
   confederation: string;
@@ -41,7 +42,7 @@ interface SeedTeam {
   squadQualityNote: string;
 }
 
-const TEAMS: SeedTeam[] = [
+export const TEAMS: SeedTeam[] = [
   {
     name: "France", code: "FRA", confederation: "UEFA", fifaRank: 1, fifaPoints: 1877.32,
     form: [7, 2, 1, 21, 8], recentFormScore: 86, wcAppearances: 16, wcBestResult: "Winners (1998, 2018)",
@@ -261,7 +262,7 @@ const TEAMS: SeedTeam[] = [
   },
 ];
 
-interface SeedMatch {
+export interface SeedMatch {
   home: string;
   away: string;
   stage: string;
@@ -272,7 +273,7 @@ interface SeedMatch {
 }
 
 // Example fixtures (generic 2026 examples, not an official schedule).
-const MATCHES: SeedMatch[] = [
+export const MATCHES: SeedMatch[] = [
   { home: "Mexico", away: "Croatia", stage: "Group A", groupMatchNumber: 1, venue: "Mexico City", homeAdvantage: true, motivationNote: "Co-hosts open the tournament" },
   { home: "Spain", away: "Japan", stage: "Group B", groupMatchNumber: 1, venue: "Los Angeles" },
   { home: "USA", away: "Senegal", stage: "Group C", groupMatchNumber: 1, venue: "New York", homeAdvantage: true },
@@ -289,6 +290,42 @@ const MATCHES: SeedMatch[] = [
   { home: "France", away: "Brazil", stage: "Quarter-final", venue: "Dallas", motivationNote: "Heavyweight clash" },
 ];
 
+/** Build the full set of Team columns for one seed entry (shared with the SQL generator). */
+export function teamCreateData(t: SeedTeam) {
+  const [w, d, l, gf, ga] = t.form;
+  return {
+    name: t.name,
+    code: t.code,
+    confederation: t.confederation,
+    fifaRank: t.fifaRank,
+    fifaPoints: t.fifaPoints,
+    fifaSourceUrl: FIFA_SOURCE,
+    fifaUpdated: FIFA_DATE,
+    formMatches: 10,
+    formWins: w,
+    formDraws: d,
+    formLosses: l,
+    formGoalsFor: gf,
+    formGoalsAgainst: ga,
+    formOpponentNote: "Mixed opposition over last 10 internationals",
+    recentFormScore: t.recentFormScore,
+    wcAppearances: t.wcAppearances,
+    wcBestResult: t.wcBestResult,
+    wcRecentPerformance: t.wcRecentPerformance,
+    knockoutExperienceNote: t.knockoutExperienceNote,
+    wcHistoryNote: `${t.wcAppearances} appearances; ${t.wcBestResult}.`,
+    worldCupExperienceScore: t.worldCupExperienceScore,
+    attackStrength: t.attackStrength,
+    defenceStrength: t.defenceStrength,
+    goalkeepingNote: t.goalkeepingNote,
+    squadQualityNote: t.squadQualityNote,
+    injuriesNote: "",
+    manualAdjustment: 0,
+    dataSource: SNAPSHOT_NOTE,
+    lastUpdated: FIFA_DATE,
+  };
+}
+
 async function main() {
   console.log("Seeding WK Pool Predictor...");
 
@@ -297,41 +334,11 @@ async function main() {
 
   // Teams.
   for (const t of TEAMS) {
-    const [w, d, l, gf, ga] = t.form;
-    const payload = {
-      code: t.code,
-      confederation: t.confederation,
-      fifaRank: t.fifaRank,
-      fifaPoints: t.fifaPoints,
-      fifaSourceUrl: FIFA_SOURCE,
-      fifaUpdated: FIFA_DATE,
-      formMatches: 10,
-      formWins: w,
-      formDraws: d,
-      formLosses: l,
-      formGoalsFor: gf,
-      formGoalsAgainst: ga,
-      formOpponentNote: "Mixed opposition over last 10 internationals",
-      recentFormScore: t.recentFormScore,
-      wcAppearances: t.wcAppearances,
-      wcBestResult: t.wcBestResult,
-      wcRecentPerformance: t.wcRecentPerformance,
-      knockoutExperienceNote: t.knockoutExperienceNote,
-      wcHistoryNote: `${t.wcAppearances} appearances; ${t.wcBestResult}.`,
-      worldCupExperienceScore: t.worldCupExperienceScore,
-      attackStrength: t.attackStrength,
-      defenceStrength: t.defenceStrength,
-      goalkeepingNote: t.goalkeepingNote,
-      squadQualityNote: t.squadQualityNote,
-      injuriesNote: "",
-      manualAdjustment: 0,
-      dataSource: SNAPSHOT_NOTE,
-      lastUpdated: FIFA_DATE,
-    };
+    const { name, ...payload } = teamCreateData(t);
     await prisma.team.upsert({
-      where: { name: t.name },
+      where: { name },
       update: payload,
-      create: { name: t.name, ...payload },
+      create: { name, ...payload },
     });
   }
 
@@ -397,11 +404,18 @@ async function main() {
   console.log(`Seeded ${TEAMS.length} teams and ${MATCHES.length} matches.`);
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// Only run automatically when executed directly (`tsx prisma/seed.ts`), not when
+// the data is imported by the SQL generator.
+const invokedDirectly =
+  !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
