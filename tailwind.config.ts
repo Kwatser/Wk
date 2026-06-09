@@ -1,0 +1,17 @@
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  content: ["./src/**/*.{ts,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          DEFAULT: "#0b6e4f",
+          dark: "#075e43",
+        },
+      },
+    },
+  },
+  plugins: [],
+};
+export default config;
