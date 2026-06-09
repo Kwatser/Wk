@@ -92,6 +92,19 @@ database** (Neon) instead of a local file.
 5. **Deploy.** Vercel builds and gives you a URL (e.g. `https://your-app.vercel.app`) you can open on
    any device, including your phone.
 
+### No computer / no Node.js? (e.g. on a tablet)
+
+You can set the database up entirely in the browser, without installing anything:
+
+1. Open your database's **SQL editor** (in Neon: *Dashboard → SQL Editor*).
+2. Copy the full contents of [`prisma/init.sql`](prisma/init.sql) and paste it in.
+3. Click **Run**. This creates all tables and loads the 31 teams + 14 example matches.
+4. Open the deployed app and click **"Regenerate all predictions"** on the dashboard — that fills in
+   the advice for every match.
+
+`prisma/init.sql` is generated from the seed data with `npm run gen:sql` (no database needed to
+generate it).
+
 Notes:
 - Use Neon's **pooled** connection string for `DATABASE_URL` (the runtime app). If `prisma db push`
   errors during step 4, run that step with the **direct/unpooled** string instead.
