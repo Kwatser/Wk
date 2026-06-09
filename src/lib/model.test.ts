@@ -33,6 +33,9 @@ const strong: TeamInput = {
   defenceStrength: 82,
   worldCupExperienceScore: 90,
   manualAdjustment: 0,
+  formMatches: 10,
+  formGoalsFor: 24,
+  formGoalsAgainst: 5,
 };
 
 const weak: TeamInput = {
@@ -44,6 +47,9 @@ const weak: TeamInput = {
   defenceStrength: 48,
   worldCupExperienceScore: 30,
   manualAdjustment: 0,
+  formMatches: 10,
+  formGoalsFor: 9,
+  formGoalsAgainst: 18,
 };
 
 describe("normalisation helpers", () => {
@@ -108,6 +114,50 @@ describe("predictMatch", () => {
     expect(r.explanation).toContain("Strongland");
     expect(r.explanation).toContain("Weaktopia");
     expect(r.explanation.length).toBeGreaterThan(200);
+  });
+
+  it("cites the actual FIFA ranks and form scores in the explanation", () => {
+    const r = predictMatch(strong, weak, { homeAdvantage: false }, weights, scoring, "balanced");
+    // Concrete FIFA ranks for both teams.
+    expect(r.explanation).toContain("FIFA rank of 1");
+    expect(r.explanation).toContain("80");
+    // Concrete form scores out of 100.
+    expect(r.explanation).toContain("85/100");
+    expect(r.explanation).toContain("40/100");
+    // Concrete attack/defence values.
+    expect(r.explanation).toMatch(/attack \(88\/100\)/);
+  });
+
+  it("explains that the leakier defence raises the opponent's expected goals", () => {
+    const r = predictMatch(strong, weak, { homeAdvantage: false }, weights, scoring, "balanced");
+    // Weaktopia concedes 1.8/game vs Strongland's 0.5/game.
+    expect(r.explanation).toContain("conceded more");
+    expect(r.explanation).toContain("increases Strongland's expected goals");
+  });
+
+  it("passes the explanation-quality check with full data (>= 4 data points)", () => {
+    const r = predictMatch(strong, weak, { homeAdvantage: false }, weights, scoring, "balanced");
+    expect(r.explanationQuality.dataPoints).toBeGreaterThanOrEqual(4);
+    expect(r.explanationQuality.ok).toBe(true);
+    expect(r.explanationQuality.missingData).toHaveLength(0);
+    expect(r.explanationQuality.warnings).toHaveLength(0);
+  });
+
+  it("warns and lists missing data when inputs are sparse", () => {
+    const sparse: TeamInput = { name: "Sparse", fifaRank: 50, manualAdjustment: 0 };
+    const alsoSparse: TeamInput = { name: "AlsoSparse", manualAdjustment: 0 };
+    const r = predictMatch(sparse, alsoSparse, { homeAdvantage: false }, weights, scoring, "balanced");
+    expect(r.explanationQuality.dataPoints).toBeLessThan(4);
+    expect(r.explanationQuality.ok).toBe(false);
+    expect(r.explanationQuality.warnings.join(" ")).toMatch(/fewer than the 4 expected/);
+    // Missing key data is named explicitly (e.g. attack/defence/form).
+    expect(r.explanationQuality.missingData.length).toBeGreaterThan(0);
+    expect(r.explanation).toContain("Missing data:");
+  });
+
+  it("avoids vague unsupported phrasing", () => {
+    const r = predictMatch(strong, weak, { homeAdvantage: false }, weights, scoring, "balanced");
+    expect(r.explanation.toLowerCase()).not.toContain("based on overall quality");
   });
 
   it("aggressive mode tends to pick a more differentiated score than safe mode", () => {

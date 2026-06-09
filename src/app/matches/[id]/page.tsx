@@ -12,7 +12,9 @@ import {
   ScoreChip,
 } from "@/components/ui";
 import { Explanation } from "@/components/explanation";
-import type { DataQuality, FactorBreakdown } from "@/lib/types";
+import type { DataQuality, ExplanationQuality, FactorBreakdown } from "@/lib/types";
+
+const DEFAULT_EQ: ExplanationQuality = { dataPoints: 0, ok: true, missingData: [], warnings: [] };
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,7 @@ export default async function MatchAdvicePage({ params }: { params: Promise<{ id
 
   const factors: FactorBreakdown[] = p ? safeParse(p.factorsJson, []) : [];
   const dq: DataQuality = p ? safeParse(p.dataQualityJson, { completeness: 1, warnings: [] }) : { completeness: 1, warnings: [] };
+  const eq: ExplanationQuality = p ? safeParse(p.explanationQualityJson ?? "", DEFAULT_EQ) : DEFAULT_EQ;
 
   const finalPick = p?.manualOverride && p.overrideScore ? p.overrideScore : p?.recommendedScore;
 
@@ -147,7 +150,25 @@ export default async function MatchAdvicePage({ params }: { params: Promise<{ id
             {dq.warnings.length > 0 && <DataWarning warnings={dq.warnings} />}
 
             <div className="card">
-              <h2 className="mb-3 text-lg font-semibold text-slate-800">Why this advice</h2>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold text-slate-800">Why this advice</h2>
+                <span
+                  className={`badge ${eq.ok ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
+                  title="Number of concrete input values cited in the explanation"
+                >
+                  {eq.dataPoints} data point{eq.dataPoints === 1 ? "" : "s"} cited
+                </span>
+              </div>
+              {!eq.ok && (
+                <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                  <div className="font-semibold">⚠ Thin explanation</div>
+                  <ul className="mt-1 list-inside list-disc space-y-0.5">
+                    {eq.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <Explanation text={p.explanation} />
             </div>
 

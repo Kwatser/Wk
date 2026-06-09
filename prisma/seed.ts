@@ -389,6 +389,7 @@ async function main() {
         explanation: result.explanation,
         factorsJson: JSON.stringify(result.factors),
         dataQualityJson: JSON.stringify(result.dataQuality),
+        explanationQualityJson: JSON.stringify(result.explanationQuality),
       },
     });
   }

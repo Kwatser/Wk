@@ -29,6 +29,14 @@ export interface TeamInput {
   defenceStrength?: number | null;
   worldCupExperienceScore?: number | null;
   manualAdjustment?: number | null;
+  // Recent-form detail — used by the explanation to cite concrete numbers
+  // (e.g. goals conceded per match). Not used in the rating maths directly.
+  formMatches?: number | null;
+  formWins?: number | null;
+  formDraws?: number | null;
+  formLosses?: number | null;
+  formGoalsFor?: number | null;
+  formGoalsAgainst?: number | null;
 }
 
 export interface MatchContext {
@@ -51,6 +59,17 @@ export interface DataQuality {
   warnings: string[];
 }
 
+export interface ExplanationQuality {
+  /** Number of concrete input values cited in the written explanation. */
+  dataPoints: number;
+  /** True when the explanation cites at least the required number of data points. */
+  ok: boolean;
+  /** Names of key inputs that were missing and therefore could not be cited. */
+  missingData: string[];
+  /** Warnings to surface to the user about the explanation's evidential strength. */
+  warnings: string[];
+}
+
 export interface PredictionResult {
   mode: PredictionMode;
   pHome: number;
@@ -67,5 +86,6 @@ export interface PredictionResult {
   risk: "Low" | "Medium" | "High";
   factors: FactorBreakdown[];
   dataQuality: DataQuality;
+  explanationQuality: ExplanationQuality;
   explanation: string;
 }

@@ -127,6 +127,19 @@ The active **prediction mode** (Settings) decides which of these becomes the hea
 - **Data quality** counts how many required inputs are present for both teams and surfaces explicit
   warnings; the explanation never pretends to be certain.
 
+### Explanation engine
+The written advice is **evidence-based, not generic** — it cites the actual input values used in the
+prediction, e.g. *"Spain has a FIFA rank of 2 (1876 pts) versus Japan at 19 (1640 pts)"*,
+*"recent form score is 88/100, compared with 76/100"*, and *"Japan has conceded more in recent matches
+(0.8 vs 0.7 per game), which increases Spain's expected goals"*. World Cup history is reported with
+its relative weight (*"…but at 10% weight it counts for less than current form (25%)"*).
+
+It also runs an **explanation-quality check**:
+- The match page shows how many concrete data points the explanation cited.
+- If fewer than **4** concrete data points are cited, a "thin explanation" warning is shown.
+- Any missing key inputs are listed explicitly (by team and field) rather than papered over with
+  vague phrasing.
+
 ---
 
 ## Data & sourcing

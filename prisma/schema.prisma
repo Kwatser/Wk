@@ -101,9 +101,10 @@ model Prediction {
   confidence String // High | Medium | Low
   risk       String // Low | Medium | High
 
-  explanation     String // long-form written reasoning
-  factorsJson     String // input factor breakdown (JSON)
-  dataQualityJson String // warnings + completeness (JSON)
+  explanation            String // long-form written reasoning
+  factorsJson            String // input factor breakdown (JSON)
+  dataQualityJson        String // warnings + completeness (JSON)
+  explanationQualityJson String? // explanation data-point count + warnings (JSON)
 
   manualOverride Boolean @default(false)
   overrideScore  String?

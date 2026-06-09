@@ -1,3 +1,4 @@
+import type { Team } from "@prisma/client";
 import { prisma } from "./prisma";
 import { predictMatch } from "./model";
 import {
@@ -16,16 +17,7 @@ export async function getSettings() {
   return prisma.settings.create({ data: { id: 1 } });
 }
 
-function toTeamInput(t: {
-  name: string;
-  fifaRank: number | null;
-  fifaPoints: number | null;
-  recentFormScore: number | null;
-  attackStrength: number | null;
-  defenceStrength: number | null;
-  worldCupExperienceScore: number | null;
-  manualAdjustment: number;
-}): TeamInput {
+function toTeamInput(t: Team): TeamInput {
   return {
     name: t.name,
     fifaRank: t.fifaRank,
@@ -35,6 +27,12 @@ function toTeamInput(t: {
     defenceStrength: t.defenceStrength,
     worldCupExperienceScore: t.worldCupExperienceScore,
     manualAdjustment: t.manualAdjustment,
+    formMatches: t.formMatches,
+    formWins: t.formWins,
+    formDraws: t.formDraws,
+    formLosses: t.formLosses,
+    formGoalsFor: t.formGoalsFor,
+    formGoalsAgainst: t.formGoalsAgainst,
   };
 }
 
@@ -78,6 +76,7 @@ export async function generatePrediction(matchId: number) {
     explanation: result.explanation,
     factorsJson: JSON.stringify(result.factors),
     dataQualityJson: JSON.stringify(result.dataQuality),
+    explanationQualityJson: JSON.stringify(result.explanationQuality),
   };
 
   return prisma.prediction.upsert({

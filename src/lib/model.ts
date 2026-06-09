@@ -16,6 +16,7 @@
 
 import type {
   DataQuality,
+  ExplanationQuality,
   FactorBreakdown,
   MatchContext,
   PredictionMode,
@@ -313,7 +314,7 @@ export function predictMatch(
 
   const factors = buildFactors(hr, ar, weights, homeBonus, homeManual, awayManual);
 
-  const explanation = buildExplanation({
+  const { text: explanation, quality: explanationQuality } = buildExplanation({
     home,
     away,
     hr,
@@ -332,6 +333,7 @@ export function predictMatch(
     risk,
     context,
     mode,
+    weights,
     dataQuality,
   });
 
@@ -351,6 +353,7 @@ export function predictMatch(
     risk,
     factors,
     dataQuality,
+    explanationQuality,
     explanation,
   };
 }
@@ -415,90 +418,215 @@ interface ExplainArgs {
   risk: string;
   context: MatchContext;
   mode: PredictionMode;
+  weights: Weights;
   dataQuality: DataQuality;
 }
+
+interface ExplanationOutput {
+  text: string;
+  quality: ExplanationQuality;
+}
+
+/** Minimum number of concrete input values a good explanation should cite. */
+const MIN_EXPLANATION_DATA_POINTS = 4;
 
 function pct(x: number): string {
   return `${Math.round(x * 100)}%`;
 }
 
-function buildExplanation(a: ExplainArgs): string {
+function wPct(x: number): string {
+  return `${Math.round(x * 100)}%`;
+}
+
+function signed(x: number): string {
+  return x > 0 ? `+${x}` : `${x}`;
+}
+
+/** Per-game rate from a season-style total, or null if inputs are missing. */
+function perGame(goals: number | null | undefined, matches: number | null | undefined): number | null {
+  if (goals == null || matches == null || matches <= 0) return null;
+  return goals / matches;
+}
+
+function buildExplanation(a: ExplainArgs): ExplanationOutput {
   const lines: string[] = [];
-  const stronger = a.ratingHome >= a.ratingAway ? a.home.name : a.away.name;
-  const weaker = a.ratingHome >= a.ratingAway ? a.away.name : a.home.name;
+  // Count of concrete *input* values cited (derived numbers like ratings and
+  // probabilities are not counted — only raw data the user actually entered).
+  let dataPoints = 0;
+  const note = (s: string) => lines.push(s);
+
+  const h = a.home;
+  const v = a.away; // visitor / away
+  const stronger = a.ratingHome >= a.ratingAway ? h.name : v.name;
+  const weaker = a.ratingHome >= a.ratingAway ? v.name : h.name;
   const gap = Math.abs(a.ratingHome - a.ratingAway);
 
-  // Which team is stronger and why.
+  const fifaPct = wPct(a.weights.wFifa);
+  const formPct = wPct(a.weights.wForm);
+  const wcPct = wPct(a.weights.wWcHistory);
+  const manualPct = wPct(a.weights.wManual);
+  const homePct = wPct(a.weights.wHomeAdvantage);
+
+  // Headline strength (derived rating — not counted as a raw data point).
   if (gap < 3) {
-    lines.push(
-      `**Even contest.** ${a.home.name} (rating ${a.ratingHome.toFixed(1)}) and ${a.away.name} ` +
-        `(rating ${a.ratingAway.toFixed(1)}) are very close, so the result is genuinely open.`,
+    note(
+      `**Even contest.** ${h.name} (rating ${a.ratingHome.toFixed(1)}) and ${v.name} ` +
+        `(rating ${a.ratingAway.toFixed(1)}) are separated by just ${gap.toFixed(1)} rating points, ` +
+        `so the result is genuinely open.`,
     );
   } else {
-    lines.push(
-      `**${stronger} is the stronger side** (rating ${Math.max(a.ratingHome, a.ratingAway).toFixed(1)} ` +
-        `vs ${Math.min(a.ratingHome, a.ratingAway).toFixed(1)} for ${weaker}), a gap of ${gap.toFixed(1)} rating points.`,
+    note(
+      `**${stronger} is the stronger side**, rating ${Math.max(a.ratingHome, a.ratingAway).toFixed(1)} ` +
+        `to ${Math.min(a.ratingHome, a.ratingAway).toFixed(1)} for ${weaker} — a gap of ${gap.toFixed(1)} rating points.`,
     );
   }
 
-  // FIFA ranking influence.
-  if (a.hr.fifaNorm != null && a.ar.fifaNorm != null) {
-    const fifaLead = a.hr.fifaNorm >= a.ar.fifaNorm ? a.home.name : a.away.name;
-    lines.push(
-      `**FIFA ranking:** ${a.home.name} ${a.home.fifaRank ? `(#${a.home.fifaRank})` : ""} vs ` +
-        `${a.away.name} ${a.away.fifaRank ? `(#${a.away.fifaRank})` : ""} — this favours ${fifaLead} ` +
-        `and pulls the rating in their direction.`,
+  // FIFA ranking — cite ranks and points explicitly.
+  if (h.fifaRank != null && v.fifaRank != null) {
+    const fifaLead = h.fifaRank <= v.fifaRank ? h.name : v.name;
+    const hPts = h.fifaPoints != null ? ` (${h.fifaPoints.toFixed(0)} pts)` : "";
+    const vPts = v.fifaPoints != null ? ` (${v.fifaPoints.toFixed(0)} pts)` : "";
+    note(
+      `**FIFA ranking:** ${h.name} has a FIFA rank of ${h.fifaRank}${hPts} versus ${v.name} at ` +
+        `${v.fifaRank}${vPts}. This favours ${fifaLead} and is weighted at ${fifaPct} of the rating.`,
     );
+    dataPoints += 2;
+    if (h.fifaPoints != null) dataPoints += 1;
+    if (v.fifaPoints != null) dataPoints += 1;
   } else {
-    lines.push(`**FIFA ranking:** incomplete, so it contributed less than usual to the rating.`);
+    note(
+      `**FIFA ranking:** not available for ${h.fifaRank == null ? h.name : v.name}, so this ${fifaPct} ` +
+        `input could not be used and was treated as neutral.`,
+    );
   }
 
-  // Recent form influence.
-  if (a.hr.form != null && a.ar.form != null) {
-    const formLead = a.hr.form >= a.ar.form ? a.home.name : a.away.name;
-    lines.push(
-      `**Recent form:** form scores are ${Math.round(a.hr.form)} (${a.home.name}) vs ` +
-        `${Math.round(a.ar.form)} (${a.away.name}), nudging the advice toward ${formLead}.`,
+  // Recent form — cite the form scores and recent goal rates.
+  if (h.recentFormScore != null && v.recentFormScore != null) {
+    const formLead = h.recentFormScore >= v.recentFormScore ? h.name : v.name;
+    note(
+      `**Recent form:** ${h.name}'s recent form score is ${Math.round(h.recentFormScore)}/100, ` +
+        `compared with ${v.name} at ${Math.round(v.recentFormScore)}/100, nudging the advice toward ` +
+        `${formLead}. Form carries ${formPct} weight.`,
     );
+    dataPoints += 2;
   } else {
-    lines.push(`**Recent form:** missing for at least one side, lowering confidence.`);
-  }
-
-  // World Cup history influence.
-  if (a.hr.wcExp != null && a.ar.wcExp != null) {
-    const wcLead = a.hr.wcExp >= a.ar.wcExp ? a.home.name : a.away.name;
-    lines.push(
-      `**World Cup history:** tournament pedigree leans toward ${wcLead} ` +
-        `(${Math.round(a.hr.wcExp)} vs ${Math.round(a.ar.wcExp)}), which matters most in tight knockout-style games.`,
+    note(
+      `**Recent form:** form score missing for ${h.recentFormScore == null ? h.name : v.name}, ` +
+        `so this ${formPct} input was treated as neutral and confidence is lower.`,
     );
   }
 
-  // Attack/defence -> expected goals.
-  lines.push(
-    `**Expected goals:** the attack-vs-defence comparison and the rating gap produce ` +
-      `xG of ${a.xgHome.toFixed(2)} for ${a.home.name} and ${a.xgAway.toFixed(2)} for ${a.away.name}.`,
-  );
+  // Recent goals scored/conceded — and the explicit effect on expected goals.
+  const hConc = perGame(h.formGoalsAgainst, h.formMatches);
+  const vConc = perGame(v.formGoalsAgainst, v.formMatches);
+  const hScored = perGame(h.formGoalsFor, h.formMatches);
+  const vScored = perGame(v.formGoalsFor, v.formMatches);
+  if (hConc != null && vConc != null) {
+    dataPoints += 2;
+    if (hScored != null) dataPoints += 1;
+    if (vScored != null) dataPoints += 1;
+    const scoredBit =
+      hScored != null && vScored != null
+        ? ` ${h.name} have scored ${hScored.toFixed(1)} and conceded ${hConc.toFixed(1)} per game over their last ` +
+          `${h.formMatches}; ${v.name} ${vScored.toFixed(1)} scored and ${vConc.toFixed(1)} conceded over their last ${v.formMatches}.`
+        : ` ${h.name} have conceded ${hConc.toFixed(1)} per game and ${v.name} ${vConc.toFixed(1)}.`;
+    if (Math.abs(hConc - vConc) < 0.1) {
+      note(
+        `**Recent goals:**${scoredBit} Their defensive records are similar, so neither side's expected ` +
+          `goals gets a meaningful lift from the opponent's leakiness.`,
+      );
+    } else {
+      const leakier = hConc > vConc ? h.name : v.name;
+      const opponent = hConc > vConc ? v.name : h.name;
+      note(
+        `**Recent goals:**${scoredBit} ${leakier} has conceded more in recent matches ` +
+          `(${Math.max(hConc, vConc).toFixed(1)} vs ${Math.min(hConc, vConc).toFixed(1)} goals per game), ` +
+          `which increases ${opponent}'s expected goals.`,
+      );
+    }
+  }
+
+  // Attack vs defence -> expected goals, citing the actual strength values.
+  const hAtk = h.attackStrength;
+  const vAtk = v.attackStrength;
+  const hDef = h.defenceStrength;
+  const vDef = v.defenceStrength;
+  if (hAtk != null && vDef != null && vAtk != null && hDef != null) {
+    note(
+      `**Attack vs defence:** ${h.name}'s attack (${Math.round(hAtk)}/100) meets ${v.name}'s defence ` +
+        `(${Math.round(vDef)}/100), while ${v.name}'s attack (${Math.round(vAtk)}/100) meets ${h.name}'s ` +
+        `defence (${Math.round(hDef)}/100). Combined with the rating gap, this produces expected goals of ` +
+        `${a.xgHome.toFixed(2)} for ${h.name} and ${a.xgAway.toFixed(2)} for ${v.name}.`,
+    );
+    dataPoints += 4;
+  } else {
+    const missingAD = [
+      hAtk == null ? `${h.name} attack` : null,
+      hDef == null ? `${h.name} defence` : null,
+      vAtk == null ? `${v.name} attack` : null,
+      vDef == null ? `${v.name} defence` : null,
+    ].filter(Boolean);
+    note(
+      `**Expected goals:** ${a.xgHome.toFixed(2)} for ${h.name} and ${a.xgAway.toFixed(2)} for ${v.name}. ` +
+        `Attack/defence data is incomplete (missing: ${missingAD.join(", ")}), so the comparison fell back ` +
+        `to a neutral 50/100 where values were absent.`,
+    );
+    if (hAtk != null) dataPoints += 1;
+    if (vAtk != null) dataPoints += 1;
+    if (hDef != null) dataPoints += 1;
+    if (vDef != null) dataPoints += 1;
+  }
+
+  // World Cup history — cite scores and note the relative weighting.
+  if (h.worldCupExperienceScore != null && v.worldCupExperienceScore != null) {
+    const wcDiff = h.worldCupExperienceScore - v.worldCupExperienceScore;
+    const wcLead = wcDiff >= 0 ? h.name : v.name;
+    const strength = Math.abs(wcDiff) < 5 ? "is essentially level" : Math.abs(wcDiff) < 15 ? "slightly favours" : "favours";
+    const verdict = strength === "is essentially level" ? "is essentially level between the two" : `${strength} ${wcLead}`;
+    note(
+      `**World Cup history:** experience score ${Math.round(h.worldCupExperienceScore)} (${h.name}) ` +
+        `vs ${Math.round(v.worldCupExperienceScore)} (${v.name}) ${verdict}, but at ${wcPct} weight it counts ` +
+        `for less than current form (${formPct}).`,
+    );
+    dataPoints += 2;
+  } else {
+    note(
+      `**World Cup history:** experience score missing for ` +
+        `${h.worldCupExperienceScore == null ? h.name : v.name}; this ${wcPct} input was treated as neutral.`,
+    );
+  }
+
+  // Manual adjustment — only mention if actually used.
+  const hAdj = h.manualAdjustment ?? 0;
+  const vAdj = v.manualAdjustment ?? 0;
+  if (hAdj !== 0 || vAdj !== 0) {
+    note(
+      `**Manual adjustment:** your overrides (injuries/motivation) of ${signed(hAdj)} for ${h.name} and ` +
+        `${signed(vAdj)} for ${v.name} were applied at ${manualPct} weight.`,
+    );
+    if (hAdj !== 0) dataPoints += 1;
+    if (vAdj !== 0) dataPoints += 1;
+  }
 
   // Home advantage.
   if (a.context.homeAdvantage) {
-    lines.push(`**Home advantage** was applied to ${a.home.name}, boosting their rating and xG.`);
+    note(`**Home advantage:** applied to ${h.name} at ${homePct} weight, lifting their rating and expected goals.`);
   }
 
-  // Probabilities + uncertainty.
-  lines.push(
-    `**Outcome probabilities:** ${a.home.name} win ${pct(a.pHome)}, draw ${pct(a.pDraw)}, ` +
-      `${a.away.name} win ${pct(a.pAway)}.`,
+  // Probabilities + uncertainty (derived numbers).
+  note(
+    `**Outcome probabilities:** ${h.name} win ${pct(a.pHome)}, draw ${pct(a.pDraw)}, ${v.name} win ${pct(a.pAway)}.`,
   );
   const topP = Math.max(a.pHome, a.pDraw, a.pAway);
   if (topP < 0.42) {
-    lines.push(
+    note(
       `**High uncertainty:** no outcome is clearly dominant (top outcome only ${pct(topP)}), ` +
         `so treat any exact score as a gamble.`,
     );
   }
 
   // Why the recommended score.
-  lines.push(
+  note(
     `**Recommended score (${a.mode} mode): ${a.recommendedScore}** — ` +
       (a.mode === "safe"
         ? `chosen to back the most likely outcome with its most probable scoreline.`
@@ -508,16 +636,40 @@ function buildExplanation(a: ExplainArgs): string {
   );
 
   // When to consider alternatives.
-  lines.push(
+  note(
     `**Alternatives:** play it safe with **${a.safeScore}** if you mainly want the toto/outcome points; ` +
       `go aggressive with **${a.aggressiveScore}** if you are behind in the pool and need a differentiator.`,
   );
 
-  // Confidence / risk / data quality.
-  lines.push(`**Confidence:** ${a.confidence}. **Risk:** ${a.risk}.`);
-  if (a.dataQuality.warnings.length) {
-    lines.push(`**Data quality:** ${a.dataQuality.warnings.join(" ")}`);
+  note(`**Confidence:** ${a.confidence}. **Risk:** ${a.risk}.`);
+
+  // Explicit missing-data callout, per the data-quality requirement.
+  const missingData = [
+    ...teamDataQuality(h).missing.map((m) => `${h.name}: ${m}`),
+    ...teamDataQuality(v).missing.map((m) => `${v.name}: ${m}`),
+  ];
+  if (missingData.length) {
+    note(
+      `**Missing data:** ${missingData.join("; ")}. These inputs could not be cited above and were treated ` +
+        `as neutral, so weigh this advice accordingly.`,
+    );
   }
 
-  return lines.join("\n\n");
+  // Explanation-quality check.
+  const ok = dataPoints >= MIN_EXPLANATION_DATA_POINTS;
+  const warnings: string[] = [];
+  if (!ok) {
+    warnings.push(
+      `This explanation cites only ${dataPoints} concrete data point${dataPoints === 1 ? "" : "s"} ` +
+        `(fewer than the ${MIN_EXPLANATION_DATA_POINTS} expected). Add more team data for sharper, evidence-based advice.`,
+    );
+  }
+  if (missingData.length) {
+    warnings.push(`Key data missing: ${missingData.join("; ")}.`);
+  }
+
+  return {
+    text: lines.join("\n\n"),
+    quality: { dataPoints, ok, missingData, warnings },
+  };
 }
