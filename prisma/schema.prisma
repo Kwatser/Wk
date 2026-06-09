@@ -1,0 +1,137 @@
+// WK Pool Predictor — data model
+// PostgreSQL + Prisma (works locally and on Vercel via a hosted DB such as Neon).
+// Everything is editable in-app; the model reads these values.
+
+generator client {
+  provider = "prisma-client-js"
+  // "native" for local dev; "rhel-openssl-3.0.x" for Vercel's serverless runtime.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Team {
+  id            Int      @id @default(autoincrement())
+  name          String   @unique
+  code          String // 3-letter code, e.g. NED
+  confederation String? // UEFA, CONMEBOL, ...
+
+  // 1. FIFA world ranking
+  fifaRank      Int?
+  fifaPoints    Float?
+  fifaSourceUrl String?
+  fifaUpdated   String? // ISO date (yyyy-mm-dd)
+
+  // 2. Recent form
+  formMatches         Int? // 5 or 10
+  formWins            Int?
+  formDraws           Int?
+  formLosses          Int?
+  formGoalsFor        Int?
+  formGoalsAgainst    Int?
+  formOpponentNote    String?
+  recentFormScore     Float? // 0-100
+
+  // 3. World Cup history
+  wcAppearances           Int?
+  wcBestResult            String?
+  wcRecentPerformance     String?
+  knockoutExperienceNote  String?
+  wcHistoryNote           String?
+  worldCupExperienceScore Float? // 0-100
+
+  // 4. Team strength
+  attackStrength   Float? // 0-100
+  defenceStrength  Float? // 0-100
+  goalkeepingNote  String?
+  squadQualityNote String?
+
+  // 5. Context (team-level)
+  injuriesNote     String?
+  manualAdjustment Float  @default(0) // -2 .. +2
+
+  // Provenance
+  dataSource  String?
+  lastUpdated String? // ISO date
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  homeMatches Match[] @relation("homeTeam")
+  awayMatches Match[] @relation("awayTeam")
+}
+
+model Match {
+  id         Int  @id @default(autoincrement())
+  homeTeamId Int
+  awayTeamId Int
+  homeTeam   Team @relation("homeTeam", fields: [homeTeamId], references: [id])
+  awayTeam   Team @relation("awayTeam", fields: [awayTeamId], references: [id])
+
+  stage            String? // "Group A", "Round of 16", ...
+  groupMatchNumber Int? // 1, 2, 3
+  kickoff          String? // ISO datetime
+  venue            String?
+
+  // Context (match-level)
+  homeAdvantage Boolean @default(false) // home team is host / plays at home
+  motivationNote String?
+  contextNote    String?
+
+  createdAt  DateTime    @default(now())
+  prediction Prediction?
+}
+
+model Prediction {
+  id      Int   @id @default(autoincrement())
+  matchId Int   @unique
+  match   Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  mode  String // safe | balanced | aggressive
+  pHome Float
+  pDraw Float
+  pAway Float
+  xgHome Float
+  xgAway Float
+
+  recommendedScore String
+  safeScore        String
+  aggressiveScore  String
+
+  confidence String // High | Medium | Low
+  risk       String // Low | Medium | High
+
+  explanation            String // long-form written reasoning
+  factorsJson            String // input factor breakdown (JSON)
+  dataQualityJson        String // warnings + completeness (JSON)
+  explanationQualityJson String? // explanation data-point count + warnings (JSON)
+
+  manualOverride Boolean @default(false)
+  overrideScore  String?
+
+  generatedAt DateTime @default(now())
+}
+
+model Settings {
+  id   Int    @id @default(1)
+  mode String @default("balanced")
+
+  // Model weights (sum ≈ 1.0)
+  wFifa          Float @default(0.25)
+  wForm          Float @default(0.25)
+  wAttack        Float @default(0.20)
+  wDefence       Float @default(0.15)
+  wWcHistory     Float @default(0.10)
+  wHomeAdvantage Float @default(0.03)
+  wManual        Float @default(0.02)
+
+  // Scorito scoring rules (configurable)
+  exactScorePoints     Float @default(8)
+  correctOutcomePoints Float @default(4)
+  correctGoalDiffPoints Float @default(0)
+
+  updatedAt DateTime @updatedAt
+}
