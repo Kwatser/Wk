@@ -28,7 +28,7 @@ goals, confidence and risk levels, and a written explanation of *why*.
 
 - **Next.js 15** (App Router) + **TypeScript**
 - **Tailwind CSS** for styling
-- **Prisma** + **SQLite** for a lightweight local database (file: `prisma/dev.db`)
+- **Prisma** + **PostgreSQL** (e.g. a free [Neon](https://neon.tech) database; works locally and on Vercel)
 - **Vitest** for the prediction-model unit tests
 
 The prediction model lives in `src/lib/model.ts` as a set of pure, documented functions so it can be
@@ -38,16 +38,22 @@ tested and reasoned about independently of the database and UI.
 
 ## Setup
 
-Requires Node.js 20+.
+Requires Node.js 20+ and a **PostgreSQL** database. The easiest free option is
+[Neon](https://neon.tech) — it works locally and on Vercel, and the same database can be used for
+both.
 
 ```bash
 # 1. Install dependencies
 npm install
 
-# 2. Generate the Prisma client, create the SQLite DB, and load seed data
+# 2. Point the app at your database
+cp .env.example .env
+#   then edit .env and set DATABASE_URL to your Neon (or other Postgres) connection string
+
+# 3. Generate the Prisma client, create the tables, and load seed data
 npm run setup        # = prisma generate && prisma db push && tsx prisma/seed.ts
 
-# 3. Start the app
+# 4. Start the app
 npm run dev          # http://localhost:3000
 ```
 
@@ -61,7 +67,36 @@ npm run db:seed      # re-load seed data
 npm run db:reset     # wipe + recreate + reseed the database
 ```
 
-The SQLite file (`prisma/dev.db`) is git-ignored. Run `npm run setup` once after cloning.
+`.env` is git-ignored — keep your connection string out of version control.
+
+---
+
+## Deploy to Vercel
+
+The app is serverless-ready. Because Vercel's filesystem is ephemeral, it uses a **hosted Postgres
+database** (Neon) instead of a local file.
+
+1. **Push to GitHub** (already done if you're reading this in the repo).
+2. **Create the database.** In the [Vercel dashboard](https://vercel.com) → your project →
+   **Storage → Create Database → Neon (Postgres)**. Vercel automatically adds a `DATABASE_URL`
+   environment variable to the project. *(Or create one at [neon.tech](https://neon.tech) and paste
+   its connection string into the project's Environment Variables as `DATABASE_URL`.)*
+3. **Import the project** in Vercel ("Add New → Project" → pick this repo). Framework preset:
+   **Next.js**. No build settings to change — the `build` script already runs `prisma generate`.
+4. **Create the tables and seed once.** From your machine, with `DATABASE_URL` in `.env` set to the
+   **same** Neon connection string:
+   ```bash
+   npm run setup
+   ```
+   This creates the schema and loads the 31 teams + 14 example matches into the hosted database.
+5. **Deploy.** Vercel builds and gives you a URL (e.g. `https://your-app.vercel.app`) you can open on
+   any device, including your phone.
+
+Notes:
+- Use Neon's **pooled** connection string for `DATABASE_URL` (the runtime app). If `prisma db push`
+  errors during step 4, run that step with the **direct/unpooled** string instead.
+- After the first deploy, any data you add/edit through the app persists in the hosted database.
+- There is no authentication — treat the deployed URL as semi-private (don't share it widely).
 
 ---
 
@@ -184,7 +219,7 @@ any missing inputs so you can see at a glance where the data is thin.
 
 ```
 prisma/
-  schema.prisma      # Team, Match, Prediction, Settings models (SQLite)
+  schema.prisma      # Team, Match, Prediction, Settings models (PostgreSQL)
   seed.ts            # researched seed data + pre-generated predictions
 src/
   lib/

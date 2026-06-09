@@ -1,12 +1,15 @@
 // WK Pool Predictor — data model
-// SQLite + Prisma. Everything is editable in-app; the model reads these values.
+// PostgreSQL + Prisma (works locally and on Vercel via a hosted DB such as Neon).
+// Everything is editable in-app; the model reads these values.
 
 generator client {
   provider = "prisma-client-js"
+  // "native" for local dev; "rhel-openssl-3.0.x" for Vercel's serverless runtime.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
