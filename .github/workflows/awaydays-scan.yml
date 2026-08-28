@@ -1,0 +1,65 @@
+# De sweep. Nog zonder cron: eerst bewijzen dat hij tegen live data klopt,
+# daarna pas inplannen. De cron komt in een volgende stap, samen met het
+# publiceren naar de data-branch.
+name: awaydays-scan
+
+on:
+  push:
+    paths:
+      - 'awaydays/**'
+      - '.github/workflows/awaydays-scan.yml'
+  workflow_dispatch:
+    inputs:
+      dates:
+        description: 'Komma-gescheiden datums; leeg = alle 16 kandidaatdatums'
+        required: false
+        default: ''
+      kickoff:
+        description: 'Aftrap in CET, 18:45 of 21:00'
+        required: false
+        default: '21:00'
+
+concurrency:
+  group: awaydays-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: awaydays
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: awaydays/package-lock.json
+
+      - run: npm ci
+
+      - name: Tests en typecheck
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Droogloop — bewijst het callbudget
+        run: npx tsx scripts/scan.ts --dry-run
+
+      - name: Sweep
+        env:
+          SCAN_DATES: ${{ github.event.inputs.dates }}
+          KICKOFF_CET: ${{ github.event.inputs.kickoff || '21:00' }}
+        run: npx tsx scripts/scan.ts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: awaydays-prijzen
+          path: awaydays/data/latest.json
+          retention-days: 14

@@ -18,9 +18,23 @@
 
 export const KICKOFF_ZONE = 'Europe/Amsterdam';
 
+/** 'YYYY-MM-DD' naar getallen, met een controle in plaats van een aanname. */
+function parseDate(dateISO: string): [number, number, number] {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateISO);
+  if (!m) throw new Error(`ongeldige datum: ${dateISO}`);
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+/** 'HH:MM' naar getallen. */
+function parseTime(hhmm: string): [number, number] {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!m) throw new Error(`ongeldige tijd: ${hhmm}`);
+  return [Number(m[1]), Number(m[2])];
+}
+
 /** Datum-rekenen zonder tijdzone-effecten. 'YYYY-MM-DD' in, 'YYYY-MM-DD' uit. */
 export function addDays(dateISO: string, n: number): string {
-  const [y, m, d] = dateISO.split('-').map(Number);
+  const [y, m, d] = parseDate(dateISO);
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + n);
   return dt.toISOString().slice(0, 10);
@@ -56,8 +70,8 @@ function zoneOffsetMs(instant: Date, timeZone: string): number {
  * klokwissel klopt de eerste schatting niet.
  */
 export function zonedTimeToUtc(dateISO: string, hhmm: string, timeZone: string): Date {
-  const [y, m, d] = dateISO.split('-').map(Number);
-  const [hh, mi] = hhmm.split(':').map(Number);
+  const [y, m, d] = parseDate(dateISO);
+  const [hh, mi] = parseTime(hhmm);
   const naive = Date.UTC(y, m - 1, d, hh, mi);
 
   let instant = naive - zoneOffsetMs(new Date(naive), timeZone);
