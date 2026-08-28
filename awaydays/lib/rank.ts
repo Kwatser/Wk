@@ -46,20 +46,28 @@ export interface RankInput {
   rotationsThatDay: number;
 }
 
+/**
+ * Bedragen afronden op centen. Zonder dit lekt de drijvende-kommarepresentatie
+ * door naar het scherm: 37,99 + 40 werd EUR 77.99000000000001.
+ */
+function euro(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export function buildRow({ offer, field, rotationsThatDay }: RankInput): RankedRow {
   const extra = surcharge(offer.carrier);
-  const comparable = offer.baseFare + extra;
+  const comparable = euro(offer.baseFare + extra);
   const parking = field.parkingPerDay * 2;
   const fuel = Math.round(field.driveKm * 2 * FUEL_COST_PER_KM);
 
   return {
     offer, field,
-    base: offer.baseFare,
+    base: euro(offer.baseFare),
     extra,
     comparable,
     parking,
     fuel,
-    total: comparable + parking + fuel,
+    total: euro(comparable + parking + fuel),
     carrierName: carrierPolicy(offer.carrier).name,
     priceAmbiguous: rotationsThatDay > 1,
   };

@@ -79,3 +79,14 @@ describe('onzekere dagprijs', () => {
     expect(twee.priceAmbiguous).toBe(true);
   });
 });
+
+describe('afronding van bedragen', () => {
+  it('laat geen drijvende-kommaruis door naar het scherm', () => {
+    // 37,99 + 40 gaf eerder 77.99000000000001 in de uitvoer.
+    const r = buildRow({
+      offer: aanbod({ baseFare: 37.99 }), field: veld(), rotationsThatDay: 1,
+    });
+    expect(r.comparable).toBe(77.99);
+    expect(r.total).toBe(175.99);
+  });
+});

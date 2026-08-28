@@ -15,12 +15,12 @@
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { TRIPS, type Trip, type DepartureField } from '../config/trips';
+import { TRIPS, airportTz, type Trip, type DepartureField } from '../config/trips';
 import { CallBudget, DEFAULTS, BudgetExceeded, CircuitOpen } from '../lib/budget';
 import { createRyanairSource } from '../lib/sources/ryanair';
 import { judge } from '../lib/feasibility';
 import { buildRow, byTicketPrice, byTotalCost, type RankedRow } from '../lib/rank';
-import { addDays } from '../lib/time';
+import { addDays, formatInZone } from '../lib/time';
 import type { Offer } from '../lib/types';
 
 const CANDIDATE_DATES = [
@@ -133,10 +133,12 @@ async function main() {
       continue;
     }
     for (const r of t.goedkoopsteTicket.slice(0, 8)) {
-      const dep = new Date(r.offer.departUtc).toISOString().slice(11, 16);
-      const arr = new Date(r.offer.arriveUtc).toISOString().slice(11, 16);
+      // Lokale tijden, want een reiziger leest geen UTC. Vertrek in de tijdzone
+      // van het vertrekveld, aankomst in die van de bestemming.
+      const dep = formatInZone(new Date(r.offer.departUtc), airportTz(r.offer.from));
+      const arr = formatInZone(new Date(r.offer.arriveUtc), airportTz(r.offer.to));
       console.log(
-        `  ${r.date}  ${r.field.code}  vertrek ${dep}Z aankomst ${arr}Z  ` +
+        `  ${r.date}  ${r.field.code}  vertrek ${dep} aankomst ${arr} (lokaal)  ` +
         `EUR ${r.comparable} (${r.base} + ${r.extra} bagage)  ` +
         `totaal met parkeren en brandstof EUR ${r.total}` +
         (r.priceAmbiguous ? '  [dagprijs, meerdere rotaties die dag]' : ''),
