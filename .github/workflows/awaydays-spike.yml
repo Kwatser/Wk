@@ -1,12 +1,14 @@
-# Stap 0 uit het plan: eenmalige verkenning van de gratis Ryanair-data.
-# Draait op push van het spike-script zelf, en verder handmatig.
-# Dit is bewust GEEN cron — de scanner komt later in een eigen workflow.
+# Stap 0 uit het plan: verkenning van de gratis Ryanair-data.
+# Bewust geen cron — de scanner komt later in een eigen workflow.
+#
+# De prijs-spike (ronde 1) heeft zijn werk gedaan en draait alleen nog handmatig,
+# zodat een push niet onnodig dertig calls naar Ryanair doet.
 name: awaydays-spike
 
 on:
   push:
     paths:
-      - 'awaydays/scripts/spike-ryanair.mjs'
+      - 'awaydays/scripts/spike-*.mjs'
       - '.github/workflows/awaydays-spike.yml'
   workflow_dispatch:
 
@@ -26,11 +28,15 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Toon uitgaand IP
         # Ryanair kan datacenter-IP's weigeren; als dat gebeurt willen we weten welk IP.
         run: curl -s --max-time 10 https://api.ipify.org || echo "ip-lookup mislukt"
 
-      - name: Ryanair-spike
+      - name: Prijzen-spike (ronde 1, alleen handmatig)
+        if: github.event_name == 'workflow_dispatch'
         run: node awaydays/scripts/spike-ryanair.mjs
+
+      - name: Schedules-spike (ronde 2)
+        run: node awaydays/scripts/spike-schedules.mjs
