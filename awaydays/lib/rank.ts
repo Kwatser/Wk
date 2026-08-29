@@ -15,23 +15,31 @@
 
 import type { Offer } from './types';
 import { carrierPolicy, surcharge } from '../config/carriers';
-import { FUEL_COST_PER_KM, type DepartureField } from '../config/trips';
+import { FUEL_COST_PER_KM, type DepartureField, type NightModel } from '../config/trips';
 
 export interface RankedRow {
   offer: Offer;
   field: DepartureField;
+  /** Welk reismodel deze rij voorstelt. Stuurt hoeveel dagen parkeren telt. */
+  variant: NightModel;
   /** Kale fare zoals de bron hem gaf. */
   base: number;
   /** Toeslag die bij een basic fare hoort; 0 bij all-in. */
   extra: number;
   /** base + extra. Hierop wordt gesorteerd. */
   comparable: number;
-  /** Parkeren voor twee dagen. */
+  /** Parkeren voor de duur van de trip (2 dagen standaard, 3 bij nightBefore). */
   parking: number;
   /** Brandstof en tol, heen en terug. */
   fuel: number;
   /** comparable + parking + fuel. Alleen ter vergelijking, niet de sorteersleutel. */
   total: number;
+  /**
+   * `total` mist een kostenpost bij `nightBefore`: de extra hotelnacht heeft geen
+   * prijsbron. Deze tekst hoort zichtbaar bij elk bedrag te staan zodat niemand
+   * het voor een compleet totaal aanziet — dezelfde fout als R3, nu bij hotels.
+   */
+  totalNote: string | null;
   carrierName: string;
   /**
    * Waar de prijs vandaan komt is per dag, niet per vlucht. Draaide er die dag
@@ -44,30 +52,42 @@ export interface RankInput {
   offer: Offer;
   field: DepartureField;
   rotationsThatDay: number;
+  /** Standaard 'standard'. */
+  variant?: NightModel;
+  /**
+   * Aantal dagen dat de auto geparkeerd staat. Standaard 2, of 3 bij nightBefore
+   * (één dag eerder weg). Expliciet overschrijfbaar voor toekomstige varianten.
+   */
+  tripDays?: number;
 }
 
 /**
  * Bedragen afronden op centen. Zonder dit lekt de drijvende-kommarepresentatie
  * door naar het scherm: 37,99 + 40 werd EUR 77.99000000000001.
  */
-function euro(n: number): number {
+export function roundEuro(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function buildRow({ offer, field, rotationsThatDay }: RankInput): RankedRow {
+export function buildRow({
+  offer, field, rotationsThatDay,
+  variant = 'standard',
+  tripDays = variant === 'nightBefore' ? 3 : 2,
+}: RankInput): RankedRow {
   const extra = surcharge(offer.carrier);
-  const comparable = euro(offer.baseFare + extra);
-  const parking = field.parkingPerDay * 2;
+  const comparable = roundEuro(offer.baseFare + extra);
+  const parking = field.parkingPerDay * tripDays;
   const fuel = Math.round(field.driveKm * 2 * FUEL_COST_PER_KM);
 
   return {
-    offer, field,
-    base: euro(offer.baseFare),
+    offer, field, variant,
+    base: roundEuro(offer.baseFare),
     extra,
     comparable,
     parking,
     fuel,
-    total: euro(comparable + parking + fuel),
+    total: roundEuro(comparable + parking + fuel),
+    totalNote: variant === 'nightBefore' ? 'excl. extra hotelnacht' : null,
     carrierName: carrierPolicy(offer.carrier).name,
     priceAmbiguous: rotationsThatDay > 1,
   };

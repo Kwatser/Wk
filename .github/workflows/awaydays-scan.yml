@@ -11,13 +11,17 @@ on:
   workflow_dispatch:
     inputs:
       dates:
-        description: 'Komma-gescheiden datums; leeg = alle 16 kandidaatdatums'
+        description: 'Komma-gescheiden datums; leeg = alle 16 kandidaatdatums. Genegeerd als matchDates is ingevuld.'
         required: false
         default: ''
       kickoff:
-        description: 'Aftrap in CET, 18:45 of 21:00'
+        description: 'Aftrap in CET, 18:45 of 21:00 (fallback als matchDates geen eigen kickoff meegeeft)'
         required: false
         default: '21:00'
+      matchDates:
+        description: 'JSON met bevestigde datum per trip, bv. {"porto":"2026-10-20","madrid":"2026-11-24"}. Leeg = kandidaat-sweep.'
+        required: false
+        default: ''
 
 concurrency:
   group: awaydays-scan-${{ github.ref }}
@@ -50,12 +54,15 @@ jobs:
           npm test
 
       - name: Droogloop — bewijst het callbudget
+        env:
+          MATCH_DATES: ${{ github.event.inputs.matchDates }}
         run: npx tsx scripts/scan.ts --dry-run
 
       - name: Sweep
         env:
           SCAN_DATES: ${{ github.event.inputs.dates }}
           KICKOFF_CET: ${{ github.event.inputs.kickoff || '21:00' }}
+          MATCH_DATES: ${{ github.event.inputs.matchDates }}
         run: npx tsx scripts/scan.ts
 
       - uses: actions/upload-artifact@v4

@@ -23,6 +23,14 @@ export interface DepartureField {
   note: string;
 }
 
+/**
+ * 'standard' = het vaste model: ochtendvlucht op wedstrijddag, terug de dag erna.
+ * 'nightBefore' = extra nacht vóór de wedstrijd: heen de avond ervoor, terug
+ * ongewijzigd de dag na de wedstrijd. Alleen aanzetten voor een trip waar de
+ * groep dat expliciet wil vergelijken — het is geen algemene optie.
+ */
+export type NightModel = 'standard' | 'nightBefore';
+
 export interface Trip {
   id: string;
   club: string;
@@ -34,6 +42,8 @@ export interface Trip {
   timezone: string;
   transfer: string;
   fields: DepartureField[];
+  /** Welke reismodellen voor deze trip berekend worden. Standaard staat altijd aan. */
+  variants: NightModel[];
 }
 
 export const TRIPS: Trip[] = [
@@ -46,6 +56,7 @@ export const TRIPS: Trip[] = [
     stadium: 'Estádio do Dragão',
     timezone: 'Europe/Lisbon',
     transfer: 'Metro lijn E van Aeroporto naar Estádio do Dragão, elke 15 minuten.',
+    variants: ['standard'],
     fields: [
       { code: 'EIN', city: 'Eindhoven', driveMinutes: 15, driveKm: 10, parkingPerDay: 12,
         carriers: ['FR'], ryanairServes: true,
@@ -80,6 +91,8 @@ export const TRIPS: Trip[] = [
     stadium: 'Santiago Bernabéu',
     timezone: 'Europe/Madrid',
     transfer: 'Metro lijn 8 vanaf Barajas naar Nuevos Ministerios, daar lijn 10 naar Santiago Bernabéu. Ongeveer 40 minuten.',
+    // Op verzoek: naast het standaardmodel ook de avond-ervoor-variant vergelijken.
+    variants: ['standard', 'nightBefore'],
     fields: [
       { code: 'EIN', city: 'Eindhoven', driveMinutes: 15, driveKm: 10, parkingPerDay: 12,
         carriers: ['FR'], ryanairServes: true,

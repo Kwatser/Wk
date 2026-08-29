@@ -90,3 +90,35 @@ describe('afronding van bedragen', () => {
     expect(r.total).toBe(175.99);
   });
 });
+
+describe('nightBefore-variant (Madrid, avond ervoor)', () => {
+  it('rekent standaard met 2 dagen parkeren', () => {
+    const r = buildRow({ offer: aanbod(), field: veld(), rotationsThatDay: 1 });
+    expect(r.variant).toBe('standard');
+    expect(r.parking).toBe(24); // 12 × 2
+    expect(r.totalNote).toBeNull();
+  });
+
+  it('rekent nightBefore met 3 dagen parkeren, niet 2', () => {
+    const r = buildRow({
+      offer: aanbod(), field: veld(), rotationsThatDay: 1, variant: 'nightBefore',
+    });
+    expect(r.variant).toBe('nightBefore');
+    expect(r.parking).toBe(36); // 12 × 3, één dag langer dan standaard
+    expect(r.total).toBe(129 + 36 + 74);
+  });
+
+  it('labelt het totaal als onvolledig zodra de hotelnacht ontbreekt', () => {
+    const r = buildRow({
+      offer: aanbod(), field: veld(), rotationsThatDay: 1, variant: 'nightBefore',
+    });
+    expect(r.totalNote).toBe('excl. extra hotelnacht');
+  });
+
+  it('laat een expliciete tripDays de default overschrijven', () => {
+    const r = buildRow({
+      offer: aanbod(), field: veld(), rotationsThatDay: 1, variant: 'nightBefore', tripDays: 5,
+    });
+    expect(r.parking).toBe(60); // 12 × 5
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { judge } from '../feasibility';
+import { judge, judgeNightBefore } from '../feasibility';
 import type { Offer } from '../types';
 
 function offer(arriveUtc: string, over: Partial<Offer> = {}): Offer {
@@ -57,5 +57,50 @@ describe('overige eisen', () => {
       '2026-09-08', '21:00',
     );
     expect(v.reason).toBe('verkeerde-datum');
+  });
+});
+
+// Madrid, avond ervoor: wedstrijddag 2026-11-24, dus heen op 2026-11-23. Geen
+// kickoff-marge — een late avondvlucht die de 3-uursregel zou afwijzen, mag hier
+// gewoon door.
+describe('judgeNightBefore', () => {
+  it('accepteert een late avondvlucht die de 3-uursregel zou afwijzen', () => {
+    const laatsteVluchtVanDeDag = offer('2026-11-23T21:00:00.000Z', {
+      outboundDate: '2026-11-23', departUtc: '2026-11-23T19:00:00.000Z',
+    });
+    const staandaard = judge(laatsteVluchtVanDeDag, '2026-11-23', '21:00');
+    expect(staandaard.feasible).toBe(false); // ter controle: zou hier wél afgewezen worden
+
+    const v = judgeNightBefore(laatsteVluchtVanDeDag, '2026-11-24', '21:00');
+    expect(v.feasible).toBe(true);
+    expect(v.reason).toBeNull();
+  });
+
+  it('wijst een vlucht op wedstrijddag zelf af (verkeerde dag)', () => {
+    const v = judgeNightBefore(
+      offer('2026-11-24T08:00:00.000Z', { outboundDate: '2026-11-24' }),
+      '2026-11-24', '21:00',
+    );
+    expect(v.feasible).toBe(false);
+    expect(v.reason).toBe('verkeerde-datum');
+  });
+
+  it('wijst overstapvluchten af, net als het standaardmodel', () => {
+    const v = judgeNightBefore(
+      offer('2026-11-23T08:00:00.000Z', { outboundDate: '2026-11-23', stops: 1 }),
+      '2026-11-24', '21:00',
+    );
+    expect(v.reason).toBe('overstap');
+  });
+
+  it('berekent bufferMinutes puur informatief, zonder erop te filteren', () => {
+    // Bijna 25 uur voor de aftrap geland — zou bij `judge` nooit een issue zijn,
+    // maar het getal moet wel kloppen als informatie.
+    const v = judgeNightBefore(
+      offer('2026-11-23T20:00:00.000Z', { outboundDate: '2026-11-23' }),
+      '2026-11-24', '21:00',
+    );
+    expect(v.feasible).toBe(true);
+    expect(v.bufferMinutes).toBe(24 * 60);
   });
 });

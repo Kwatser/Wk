@@ -10,7 +10,7 @@
  */
 
 import type { Offer } from './types';
-import { kickoffInstant, HOUR } from './time';
+import { kickoffInstant, addDays, HOUR } from './time';
 
 export const MIN_BUFFER_HOURS = 3;
 
@@ -54,4 +54,30 @@ export function feasibleOnly(
   return offers
     .map((o) => judge(o, matchDate, kickoffCet, bufferHours))
     .filter((v) => v.feasible);
+}
+
+/**
+ * Beoordeling voor de avond-ervoor-variant: heen op de dag vóór de wedstrijd in
+ * plaats van op wedstrijddag zelf. Bewust een aparte functie, geen parameter op
+ * `judge` — de 3-uursregel is hier niet van toepassing (je bent al een nacht
+ * eerder aanwezig), en `judge` moet voor het standaardmodel onaangeroerd blijven.
+ *
+ * `bufferMinutes` wordt nog wel berekend, puur informatief: hoeveel marge er is
+ * tot de aftrap. Dat getal bepaalt hier niets, in tegenstelling tot bij `judge`.
+ */
+export function judgeNightBefore(
+  offer: Offer,
+  matchDate: string,
+  kickoffCet: string,
+): Verdict {
+  const dayBefore = addDays(matchDate, -1);
+  const kickoff = kickoffInstant(matchDate, kickoffCet);
+  const arrive = new Date(offer.arriveUtc);
+  const bufferMinutes = Math.round((kickoff.getTime() - arrive.getTime()) / 60_000);
+
+  let reason: RejectReason | null = null;
+  if (offer.outboundDate !== dayBefore) reason = 'verkeerde-datum';
+  else if (offer.stops > 0) reason = 'overstap';
+
+  return { offer, feasible: reason === null, reason, bufferMinutes };
 }
