@@ -211,13 +211,20 @@ async function runConfirmed(matchDates: Record<string, ConfirmedMatch>) {
     }
     if (t.nightBeforeComparison) {
       console.log(`  --- avond ervoor versus standaard, per veld ---`);
+      const describe = (row: (RankedRow & { date: string }) | null) => {
+        if (!row) return 'geen optie';
+        const dep = formatInZone(new Date(row.offer.departUtc), airportTz(row.offer.from));
+        const arr = formatInZone(new Date(row.offer.arriveUtc), airportTz(row.offer.to));
+        return `EUR ${row.comparable} (${row.date} ${dep}→${arr} lokaal)` +
+          (row.priceAmbiguous ? ' [dagprijs]' : '');
+      };
       for (const c of t.nightBeforeComparison) {
-        const std = c.standard ? `EUR ${c.standard.comparable}` : 'geen optie';
-        const nb = c.nightBefore ? `EUR ${c.nightBefore.comparable}` : 'geen optie';
         const delta = c.ticketDelta === null ? ''
-          : c.ticketDelta <= 0 ? `  (avond ervoor EUR ${Math.abs(c.ticketDelta)} goedkoper)`
-          : `  (avond ervoor EUR ${c.ticketDelta} duurder)`;
-        console.log(`    ${c.field}: standaard ${std}  vs  avond ervoor ${nb}${delta}`);
+          : c.ticketDelta <= 0 ? `  ==> avond ervoor EUR ${Math.abs(c.ticketDelta)} goedkoper`
+          : `  ==> avond ervoor EUR ${c.ticketDelta} duurder`;
+        console.log(`    ${c.field}`);
+        console.log(`      standaard:     ${describe(c.standard)}`);
+        console.log(`      avond ervoor:  ${describe(c.nightBefore)}${delta}`);
       }
     }
   }
